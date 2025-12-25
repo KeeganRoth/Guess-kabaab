@@ -1,7 +1,5 @@
 // Guess the Phrase — static Heads Up–style game
-// Features: swipe + tap fallback, shuffle/loop toggles, timer + results,
-// fullscreen button, wake lock attempt, vibration feedback,
-// and optional tilt controls with iOS permission + debounce + neutral reset.
+// Adds: service worker registration for offline caching.
 
 (() => {
   'use strict';
@@ -75,7 +73,7 @@
     }
   }
 
-  // Phrase parsing
+  // Phrase parsing rules
   function parsePhrases(text) {
     return text
       .split(/\r?\n/)
@@ -127,12 +125,11 @@
 
   // Tilt tuning knobs
   const TILT = {
-    // beta delta from baseline (degrees)
     forwardTriggerDelta: 18,    // forward/down => GOT IT
     backwardTriggerDelta: -18,  // backward/up => PASS
-    neutralZoneAbs: 10,         // must return within +/- neutralZoneAbs to re-arm
-    minIntervalMs: 700,         // debounce between triggers
-    baselineSmoothing: 0.12     // low-pass baseline adjustment near neutral
+    neutralZoneAbs: 10,         // return within this to re-arm
+    minIntervalMs: 700,         // debounce
+    baselineSmoothing: 0.12     // baseline adjustment near neutral
   };
 
   // -----------------------------
@@ -566,7 +563,6 @@
     }
 
     if (isIOSNeedsMotionPermission() && !State.tiltPermissionGranted) {
-      // Show permission button; tilt is enabled but not active until granted
       motionPermBtn.hidden = false;
       setTiltStatus('Needs permission');
       return;
@@ -584,7 +580,6 @@
       return;
     }
     const delta = beta - State.tiltNeutralBeta;
-    // Only adjust baseline when near neutral to avoid drift while tilted
     if (Math.abs(delta) <= TILT.neutralZoneAbs + 4) {
       State.tiltNeutralBeta = State.tiltNeutralBeta + delta * TILT.baselineSmoothing;
     }
@@ -597,10 +592,8 @@
     if (beta == null) return;
 
     calibrateBaseline(beta);
-
     const delta = beta - State.tiltNeutralBeta;
 
-    // If disarmed, wait until user returns to neutral
     if (!State.tiltArmed) {
       if (Math.abs(delta) <= TILT.neutralZoneAbs) {
         State.tiltArmed = true;
@@ -630,7 +623,6 @@
       return;
     }
 
-    // Subtle status while armed
     if (Math.abs(delta) <= TILT.neutralZoneAbs) setTiltStatus('Neutral');
     else setTiltStatus(delta > 0 ? 'Forward' : 'Backward');
   }
@@ -713,7 +705,6 @@
     syncOptionsFromUI();
     saveSettings({ tiltEnabled: State.tiltEnabled });
 
-    // show motion permission button only when relevant
     if (State.tiltEnabled && isIOSNeedsMotionPermission() && !State.tiltPermissionGranted) {
       motionPermBtn.hidden = false;
     } else {
@@ -723,12 +714,9 @@
 
   startBtn.addEventListener('click', () => {
     syncOptionsFromUI();
-
-    // If tilt enabled on iOS and permission missing, show button (tilt activates after grant)
     if (State.tiltEnabled && isIOSNeedsMotionPermission() && !State.tiltPermissionGranted) {
-      motionPermBtn.hidden = false;
+      motionPermBtn.hidden = false; // tilt activates after grant
     }
-
     startRound();
   });
 
@@ -780,7 +768,7 @@
   });
 
   playAgainBtn.addEventListener('click', () => {
-    // Force reshuffle for play again (without changing user's preference long-term)
+    // Force reshuffle for play again (without permanently changing preference)
     const prevShuffle = State.shuffleOnStart;
     State.shuffleOnStart = true;
     shuffleOnStartInput.checked = true;
@@ -808,6 +796,37 @@
   });
 
   // -----------------------------
+  // Service worker registration (offline caching)
+  // -----------------------------
+  async function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+
+    try {
+      // Works on GitHub Pages (HTTPS). Scope defaults to the folder this file is served from.
+      const reg = await navigator.serviceWorker.register('./sw.js');
+
+      // If a new SW is waiting, activate it ASAP (no UI prompt here).
+      // User will get the new version on next load.
+      if (reg.waiting) {
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
+
+      reg.addEventListener('updatefound', () => {
+        const sw = reg.installing;
+        if (!sw) return;
+        sw.addEventListener('statechange', () => {
+          if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+            // New version installed (will control on next navigation)
+            // Keep silent/minimal. If you want a toast, add it here.
+          }
+        });
+      });
+    } catch {
+      // ignore (still runs fine without SW)
+    }
+  }
+
+  // -----------------------------
   // Boot
   // -----------------------------
   function init() {
@@ -817,12 +836,13 @@
     updatePhraseCountMeta();
     setScreen('setup');
 
-    // On iOS, show permission button only if tilt is enabled
     if (State.tiltEnabled && isIOSNeedsMotionPermission() && !State.tiltPermissionGranted) {
       motionPermBtn.hidden = false;
     } else {
       motionPermBtn.hidden = true;
     }
+
+    registerServiceWorker();
   }
 
   init();

@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#0b1220" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Guess the Phrase</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">🎭</span>
+      <span class="title">Guess the Phrase</span>
+    </div>
+    <div class="header-actions">
+      <button id="fullscreenBtn" class="btn btn-ghost" type="button" title="Fullscreen (where supported)">
+        Fullscreen
+      </button>
+    </div>
+  </header>
+
+  <main class="app" id="app" aria-live="polite">
+    <!-- SETUP SCREEN -->
+    <section id="screenSetup" class="screen screen-active" aria-labelledby="setupTitle">
+      <h1 id="setupTitle" class="screen-title">Setup</h1>
+
+      <div class="card">
+        <label class="label" for="phrasesInput">Phrases (one per line)</label>
+        <textarea id="phrasesInput" class="textarea" rows="10" spellcheck="false"
+          placeholder="Examples:
+Charades
+Pizza night
+The Eiffel Tower
+# lines starting with # are ignored"></textarea>
+
+        <div class="row row-wrap gap-sm">
+          <label class="file">
+            <input id="fileInput" type="file" accept=".txt,text/plain" />
+            <span class="btn btn-secondary">Load from .txt</span>
+          </label>
+
+          <button id="useSampleBtn" class="btn btn-ghost" type="button">Use sample list</button>
+          <button id="clearBtn" class="btn btn-ghost" type="button">Clear</button>
+        </div>
+
+        <p class="hint">
+          Parsing rules: trims whitespace, ignores empty lines, ignores comment lines starting with <code>#</code>.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">Options</h2>
+
+        <div class="grid-2">
+          <div>
+            <label class="label" for="timerSeconds">Round timer (seconds)</label>
+            <input id="timerSeconds" class="input" type="number" min="10" max="600" step="5" value="60" inputmode="numeric" />
+            <p class="hint">Tip: 60–90 seconds is great for kids.</p>
+          </div>
+
+          <div>
+            <label class="label">Gameplay</label>
+            <div class="checks">
+              <label class="check">
+                <input id="shuffleOnStart" type="checkbox" checked />
+                <span>Shuffle on start</span>
+              </label>
+              <label class="check">
+                <input id="loopWhenFinished" type="checkbox" />
+                <span>Loop when finished</span>
+              </label>
+              <label class="check">
+                <input id="vibrateOnAction" type="checkbox" checked />
+                <span>Vibrate on Got it/Pass</span>
+              </label>
+              <label class="check">
+                <input id="tiltEnabled" type="checkbox" />
+                <span>Enable tilt controls</span>
+              </label>
+            </div>
+            <p class="hint">
+              Tilt forward = <strong>Got it</strong>, tilt backward = <strong>Pass</strong>. Swipe/tap still works.
+            </p>
+          </div>
+        </div>
+
+        <div class="row gap-sm row-wrap">
+          <button id="startBtn" class="btn btn-primary btn-lg" type="button">Start</button>
+
+          <!-- Shows only on iOS when DeviceOrientation permission is required -->
+          <button id="motionPermBtn" class="btn btn-secondary" type="button" hidden>
+            Request Motion Access
+          </button>
+
+          <div class="meta" id="phraseCountMeta" aria-live="polite"></div>
+        </div>
+      </div>
+
+      <footer class="footer">
+        <p class="small">
+          Swipe right = <span class="pill pill-green">Got it</span> • Swipe left = <span class="pill pill-yellow">Pass</span>
+        </p>
+      </footer>
+    </section>
+
+    <!-- GAME SCREEN -->
+    <section id="screenGame" class="screen" aria-labelledby="gameTitle" aria-hidden="true">
+      <h1 id="gameTitle" class="sr-only">Game</h1>
+
+      <div class="game-top">
+        <div class="hud">
+          <div class="hud-item">
+            <span class="hud-label">Time</span>
+            <span id="timeLeft" class="hud-value">60</span>
+          </div>
+          <div class="hud-item">
+            <span class="hud-label">Progress</span>
+            <span id="progress" class="hud-value">0 / 0</span>
+          </div>
+          <div class="hud-item">
+            <span class="hud-label">Remaining</span>
+            <span id="remaining" class="hud-value">0</span>
+          </div>
+        </div>
+
+        <div class="tilt-status" id="tiltStatus" aria-live="polite"></div>
+      </div>
+
+      <div id="gameStage" class="game-stage" role="application" aria-label="Swipe, tap, or tilt to advance">
+        <!-- Tap zones -->
+        <button id="tapLeft" class="tap-zone tap-left" type="button" aria-label="Pass (tap left)"></button>
+        <button id="tapRight" class="tap-zone tap-right" type="button" aria-label="Got it (tap right)"></button>
+
+        <div class="phrase-wrap">
+          <div id="phrase" class="phrase">Ready?</div>
+          <div id="feedback" class="feedback" aria-live="polite" aria-atomic="true"></div>
+        </div>
+      </div>
+
+      <div class="game-bottom">
+        <div class="row gap-sm">
+          <button id="nextBtn" class="btn btn-secondary" type="button">Next</button>
+          <button id="endBtn" class="btn btn-ghost" type="button">End round</button>
+        </div>
+        <p class="hint center">Swipe/tap always works. Tilt is optional.</p>
+      </div>
+    </section>
+
+    <!-- RESULTS SCREEN -->
+    <section id="screenResults" class="screen" aria-labelledby="resultsTitle" aria-hidden="true">
+      <h1 id="resultsTitle" class="screen-title">Time!</h1>
+
+      <div class="card">
+        <div class="results-grid">
+          <div class="stat">
+            <div class="stat-label">Total shown</div>
+            <div id="statTotal" class="stat-value">0</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Got it</div>
+            <div id="statGot" class="stat-value stat-green">0</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Pass</div>
+            <div id="statPass" class="stat-value stat-yellow">0</div>
+          </div>
+        </div>
+
+        <div class="row gap-sm row-wrap">
+          <button id="playAgainBtn" class="btn btn-primary btn-lg" type="button">Play again</button>
+          <button id="editListBtn" class="btn btn-secondary btn-lg" type="button">Edit list</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">Round details</h2>
+        <p class="hint" id="roundDetails"></p>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

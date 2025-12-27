@@ -74,12 +74,24 @@
   }
 
   // Phrase parsing rules
+  // Supports either:
+  //   Phrase
+  //   Phrase :: description/background
+  // Lines starting with # are ignored.
   function parsePhrases(text) {
     return text
       .split(/\r?\n/)
       .map((l) => l.trim())
       .filter((l) => l.length > 0)
-      .filter((l) => !l.startsWith('#'));
+      .filter((l) => !l.startsWith('#'))
+      .map((line) => {
+        const parts = line.split('::');
+        const phrase = (parts[0] ?? '').trim();
+        // allow extra :: inside description by joining remainder back
+        const hint = parts.slice(1).join('::').trim();
+        return { phrase, hint };
+      })
+      .filter((o) => o.phrase.length > 0);
   }
 
   // Fisher–Yates shuffle
@@ -95,6 +107,7 @@
   const State = {
     mode: 'setup', // 'setup' | 'running' | 'finished'
 
+    // phrases are objects: { phrase: string, hint: string }
     phrasesOriginal: [],
     deck: [],
     index: 0,
@@ -188,13 +201,14 @@
   // Gameplay
   // -----------------------------
   function buildDeck(phrases) {
-    const deck = [...phrases];
+    const deck = phrases.map((p) => ({ ...p })); // copy objects
     if (State.shuffleOnStart) fisherYatesShuffle(deck);
     return deck;
   }
 
   function renderCurrentPhrase() {
-    phraseEl.textContent = State.deck[State.index] ?? 'Done!';
+    const item = State.deck[State.index];
+    phraseEl.textContent = item?.phrase ?? 'Done!';
   }
 
   function maybeVibrate(action) {
@@ -212,7 +226,7 @@
     if (State.mode !== 'running') return;
 
     const current = State.deck[State.index];
-    if (current == null) {
+    if (!current) {
       if (State.loopWhenFinished && State.deck.length > 0) {
         State.index = 0;
         renderCurrentPhrase();
@@ -728,23 +742,23 @@
 
   useSampleBtn.addEventListener('click', () => {
     const sample = [
-      '# Sample family-friendly list',
-      'Popcorn',
-      'A sneaky cat',
-      'Snow day',
-      'Dance party',
-      'The moon',
-      'Pizza night',
-      'A superhero',
-      'Hide and seek',
-      'A dinosaur',
-      'Spaghetti',
-      'A sleepy dragon',
-      'Banana peel',
-      'Camping trip',
-      'Magic wand',
-      'Rainbow',
-      'A giant sandwich'
+      '# Sample family-friendly list (supports "phrase :: background")',
+      'Popcorn :: Snack you eat at the movies',
+      'A sneaky cat :: Quiet little troublemaker',
+      'Snow day :: No school, lots of fun',
+      'Dance party :: Music + silly moves',
+      'The moon :: Bright thing in the night sky',
+      'Pizza night :: Cheesy dinner everyone loves',
+      'A superhero :: Saves the day with powers',
+      'Hide and seek :: One person counts, others hide',
+      'A dinosaur :: Big ancient reptile',
+      'Spaghetti :: Long noodles with sauce',
+      'A sleepy dragon :: Big mythical creature who needs a nap',
+      'Banana peel :: Slippery yellow skin',
+      'Camping trip :: Sleeping outside in a tent',
+      'Magic wand :: Used to cast spells',
+      'Rainbow :: Colorful arc after rain',
+      'A giant sandwich :: Too big to bite'
     ].join('\n');
     phrasesInput.value = sample;
     saveSettings({ phrasesText: sample });

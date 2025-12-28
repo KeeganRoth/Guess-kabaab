@@ -1,6 +1,9 @@
 // Guess the Phrase — static Heads Up–style game
 // Adds: service worker registration for offline caching.
 
+import { createMovementController } from './movement.js';
+import { createAdminController } from './admin.js';
+
 (() => {
   'use strict';
 
